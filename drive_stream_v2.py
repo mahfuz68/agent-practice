@@ -4,6 +4,7 @@ Google Drive Direct Link Generator with Virus Scan Bypass
 
 This script handles Google Drive's virus scan warning for large files
 and generates working direct download links for VLC streaming.
+Supports both individual files and folders (generates M3U playlists for video folders).
 """
 
 import os
@@ -45,6 +46,21 @@ def authenticate_google_drive():
 
     return build('drive', 'v3', credentials=creds)
 
+def extract_id_from_url(url):
+    """Extract file or folder ID from Google Drive URL"""
+    # Match file URL: https://drive.google.com/file/d/{id}/view?usp=drive_link
+    file_match = re.search(r'/file/d/([a-zA-Z0-9_-]+)', url)
+    if file_match:
+        return 'file', file_match.group(1)
+    
+    # Match folder URL: https://drive.google.com/drive/folders/{id}?usp=drive_link
+    folder_match = re.search(r'/folders/([a-zA-Z0-9_-]+)', url)
+    if folder_match:
+        return 'folder', folder_match.group(1)
+    
+    # Fallback: assume it's a direct ID
+    return 'file', url
+
 def get_real_download_link(file_id):
     """Get the real download link by handling virus scan warning"""
     try:
@@ -78,6 +94,61 @@ def get_real_download_link(file_id):
     except Exception as e:
         print(f"❌ Error getting download link: {str(e)}")
         return None
+
+def process_folder(folder_id):
+    """Process a Google Drive folder and generate M3U playlist for video files"""
+    try:
+        drive_service = authenticate_google_drive()
+
+        # Get folder metadata
+        folder_metadata = drive_service.files().get(
+            fileId=folder_id,
+            fields='name'
+        ).execute()
+        folder_name = folder_metadata.get('name', 'Unknown_Folder')
+
+        # List video files in the folder
+        query = f"'{folder_id}' in parents and mimeType contains 'video/'"
+        results = drive_service.files().list(
+            q=query,
+            fields="files(id,name,mimeType)"
+        ).execute()
+        video_files = results.get('files', [])
+
+        if not video_files:
+            print(f"❌ No video files found in folder '{folder_name}'")
+            return
+
+        print(f"📁 Processing folder: {folder_name}")
+        print(f"🎥 Found {len(video_files)} video files")
+
+        # Generate M3U content
+        m3u_content = "#EXTM3U\n"
+        for video in video_files:
+            file_id = video['id']
+            filename = video['name']
+            direct_link = get_real_download_link(file_id)
+            if direct_link:
+                m3u_content += f"#EXTINF:-1,{filename}\n{direct_link}\n"
+            else:
+                print(f"⚠️  Could not generate link for {filename}")
+
+        # Ensure v_link directory exists
+        v_link_dir = 'v_link'
+        if not os.path.exists(v_link_dir):
+            os.makedirs(v_link_dir)
+
+        # Write M3U file
+        m3u_filename = f"{folder_name}.m3u"
+        m3u_path = os.path.join(v_link_dir, m3u_filename)
+        with open(m3u_path, 'w', encoding='utf-8') as f:
+            f.write(m3u_content)
+
+        print(f"✅ M3U playlist generated: {m3u_path}")
+        print("💡 You can open this file in VLC Media Player to stream all videos")
+
+    except Exception as e:
+        print(f"❌ Error processing folder: {str(e)}")
 
 def get_direct_link(file_id):
     """Get direct download link for Google Drive file"""
@@ -122,9 +193,6 @@ def get_direct_link(file_id):
         print("2. Open VLC Media Player")
         print("3. Media → Open Network Stream")
         print("4. Paste the link and click Play")
-        print()
-        print("⚠️  Note: Large files may show virus scan warnings from Google")
-        print("   This script automatically handles those warnings.")
 
         return real_download_link
 
@@ -134,12 +202,20 @@ def get_direct_link(file_id):
 
 def main():
     if len(sys.argv) < 2:
-        print("❌ Usage: python drive_stream_v2.py <file_id>")
-        print("Example: python drive_stream_v2.py 1ABC123xyz456DEF789")
+        print("❌ Usage: python drive_stream_v2.py <Google Drive URL or File/Folder ID>")
+        print("Examples:")
+        print("  python drive_stream_v2.py https://drive.google.com/file/d/1ABC123xyz456DEF789/view?usp=drive_link")
+        print("  python drive_stream_v2.py https://drive.google.com/drive/folders/1-7IK1sZ_vqphG6L8zr7DOpPcUGwkLQnC?usp=drive_link")
+        print("  python drive_stream_v2.py 1ABC123xyz456DEF789")
         sys.exit(1)
 
-    file_id = sys.argv[1]
-    get_direct_link(file_id)
+    input_url = sys.argv[1]
+    link_type, item_id = extract_id_from_url(input_url)
+
+    if link_type == 'folder':
+        process_folder(item_id)
+    else:
+        get_direct_link(item_id)
 
 if __name__ == "__main__":
     main()
