@@ -95,8 +95,8 @@ def get_real_download_link(file_id):
         print(f"❌ Error getting download link: {str(e)}")
         return None
 
-def process_folder(folder_id):
-    """Process a Google Drive folder and generate M3U playlist for video files"""
+def process_folder(folder_id, local_path='v_link'):
+    """Recursively process a Google Drive folder and generate M3U playlists for video files and nested folders"""
     try:
         drive_service = authenticate_google_drive()
 
@@ -107,45 +107,62 @@ def process_folder(folder_id):
         ).execute()
         folder_name = folder_metadata.get('name', 'Unknown_Folder')
 
-        # List video files in the folder
-        query = f"'{folder_id}' in parents and mimeType contains 'video/'"
+        # List all items in the folder (both video files and nested folders)
+        query = f"'{folder_id}' in parents and trashed=false"
         results = drive_service.files().list(
             q=query,
-            fields="files(id,name,mimeType)"
+            fields="files(id,name,mimeType)",
+            pageSize=1000
         ).execute()
-        video_files = results.get('files', [])
+        items = results.get('files', [])
 
-        if not video_files:
-            print(f"❌ No video files found in folder '{folder_name}'")
-            return
+        # Separate videos and folders
+        video_files = [item for item in items if item['mimeType'].startswith('video/')]
+        nested_folders = [item for item in items if item['mimeType'] == 'application/vnd.google-apps.folder']
+
+        # Sort video files by name
+        video_files.sort(key=lambda x: x['name'])
 
         print(f"📁 Processing folder: {folder_name}")
         print(f"🎥 Found {len(video_files)} video files")
+        print(f"📂 Found {len(nested_folders)} nested folders")
 
-        # Generate M3U content
-        m3u_content = "#EXTM3U\n"
-        for video in video_files:
-            file_id = video['id']
-            filename = video['name']
-            direct_link = get_real_download_link(file_id)
-            if direct_link:
-                m3u_content += f"#EXTINF:-1,{filename}\n{direct_link}\n"
-            else:
-                print(f"⚠️  Could not generate link for {filename}")
+        # If there are nested folders, create a subfolder for this one
+        # If only videos (no nested folders), create M3U directly in local_path
+        if nested_folders:
+            folder_path = os.path.join(local_path, folder_name)
+            if not os.path.exists(folder_path):
+                os.makedirs(folder_path)
+                print(f"📂 Created folder: {folder_path}")
+        else:
+            folder_path = local_path
 
-        # Ensure v_link directory exists
-        v_link_dir = 'v_link'
-        if not os.path.exists(v_link_dir):
-            os.makedirs(v_link_dir)
+        # Generate M3U content for videos in this folder
+        if video_files:
+            m3u_content = "#EXTM3U\n"
+            for video in video_files:
+                file_id = video['id']
+                filename = video['name']
+                direct_link = get_real_download_link(file_id)
+                if direct_link:
+                    m3u_content += f"#EXTINF:-1,{filename}\n{direct_link}\n"
+                else:
+                    print(f"⚠️  Could not generate link for {filename}")
 
-        # Write M3U file
-        m3u_filename = f"{folder_name}.m3u"
-        m3u_path = os.path.join(v_link_dir, m3u_filename)
-        with open(m3u_path, 'w', encoding='utf-8') as f:
-            f.write(m3u_content)
+            # Write M3U file
+            m3u_filename = f"{folder_name}.m3u"
+            m3u_path = os.path.join(folder_path, m3u_filename)
+            with open(m3u_path, 'w', encoding='utf-8') as f:
+                f.write(m3u_content)
+            print(f"✅ M3U playlist generated: {m3u_path}")
 
-        print(f"✅ M3U playlist generated: {m3u_path}")
-        print("💡 You can open this file in VLC Media Player to stream all videos")
+        # Recursively process nested folders
+        for nested_folder in nested_folders:
+            print()
+            process_folder(nested_folder['id'], folder_path)
+
+        if not video_files and not nested_folders:
+            print(f"⚠️  No video files or nested folders found in '{folder_name}'")
 
     except Exception as e:
         print(f"❌ Error processing folder: {str(e)}")
