@@ -7,9 +7,12 @@ A Python script that generates direct download/streaming links from Google Drive
 - 🔗 **Direct Link Generation**: Converts Google Drive share links to direct download URLs
 - 🛡️ **Virus Scan Bypass**: Automatically handles Google's virus scan warnings for large files
 - 📁 **Folder Support**: Processes entire folders and generates M3U playlists for all video files
+- 📂 **Nested Folder Support**: Recursively handles nested folder structures and creates appropriate directory layouts
 - 🎵 **VLC Streaming**: Generated links work seamlessly with VLC Media Player
 - 🔐 **Secure Authentication**: Uses OAuth 2.0 for Google Drive API access
 - 📋 **M3U Playlists**: Creates organized playlist files for folder contents
+- 📊 **Smart Organization**: Automatically sorts videos by filename and creates folders only when needed
+- 🎬 **Recursive Processing**: Handles deeply nested folder hierarchies automatically
 
 ## Prerequisites
 
@@ -70,7 +73,34 @@ python drive_stream_v2.py 1O_6so3eUN8YsaZR4WzI7zxZQ2C25gXTi
 ### Output
 
 - **For Files**: Displays file information and direct streaming link
-- **For Folders**: Creates an M3U playlist file in the `v_link/` directory containing all video files
+- **For Folders**: Creates M3U playlist files in the `v_link/` directory containing all video files
+- **For Nested Folders**: Creates a hierarchical folder structure with M3U files at each level
+
+### Nested Folder Example
+
+When processing a folder with nested structure:
+
+```
+Google Drive Folder (input)
+├── Section 01 (folder with only videos)
+│   ├── 001 Chapter 1.mp4
+│   ├── 002 Chapter 2.mp4
+│   └── 003 Chapter 3.mp4
+├── Section 02 (folder with only videos)
+│   ├── 001 Intro.mp4
+│   └── 002 Main.mp4
+```
+
+Generated local structure:
+
+```
+v_link/
+├── Google Drive Folder/
+│   ├── Section 01.m3u (contains links to 3 videos)
+│   └── Section 02.m3u (contains links to 2 videos)
+```
+
+**Note**: Videos are automatically sorted by filename within each M3U file for proper playback order.
 
 ## How It Works
 
@@ -81,9 +111,15 @@ python drive_stream_v2.py 1O_6so3eUN8YsaZR4WzI7zxZQ2C25gXTi
    - Generates direct download link
    - Handles virus scan warnings automatically
 4. **Folder Processing**:
-   - Lists all video files in the folder
+   - Recursively lists all video files and nested folders
+   - Separates videos from folders intelligently
+   - Sorts videos by filename for proper playback order
    - Generates direct links for each video
    - Creates M3U playlist with all video links
+5. **Smart Directory Structure**:
+   - If a folder has **only videos**: Creates M3U file directly in parent folder
+   - If a folder has **nested folders**: Creates a subfolder and processes recursively
+   - Automatically organizes deeply nested structures
 
 ## M3U Playlist Format
 
@@ -126,13 +162,17 @@ The script automatically detects and bypasses Google's virus scan warnings by:
 ## File Structure
 
 ```
-agent-practice/
-├── drive_stream_v2.py    # Main script
-├── credentials.json      # Google API credentials (not included)
-├── token.pickle         # OAuth token (generated)
-├── v_link/              # Generated M3U playlists
-│   └── Folder Name.m3u
-└── README.md            # This file
+drive-direct-link_m3u/
+├── drive_stream_v2.py     # Main script
+├── credentials.json       # Google API credentials (not included)
+├── token.pickle          # OAuth token (generated)
+├── v_link/               # Generated M3U playlists and folders
+│   ├── Parent Folder/
+│   │   ├── Section 1.m3u
+│   │   ├── Section 2.m3u
+│   │   └── Section 3.m3u
+│   └── Single Videos.m3u
+└── README.md             # This file
 ```
 
 ## Security Notes
