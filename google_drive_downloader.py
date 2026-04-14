@@ -10,6 +10,8 @@ import argparse
 from pathlib import Path
 from typing import Optional
 
+DOWNLOAD_DIR = "down_files"
+
 
 def download_file_gdown(
     file_id_or_url: str,
@@ -35,11 +37,19 @@ def download_file_gdown(
         return False
     
     try:
-        # If it's a file ID, construct the URL
-        if not file_id_or_url.startswith("http"):
-            url = f"https://drive.google.com/uc?id={file_id_or_url}"
+        file_id = file_id_or_url
+        
+        # Extract file ID from full URL if needed
+        if file_id_or_url.startswith("http"):
+            if "/d/" in file_id_or_url:
+                try:
+                    file_id = file_id_or_url.split("/d/")[1].split("/")[0]
+                except IndexError:
+                    print("✗ Could not extract file ID from URL")
+                    return False
+            url = f"https://drive.google.com/uc?id={file_id}"
         else:
-            url = file_id_or_url
+            url = f"https://drive.google.com/uc?id={file_id}"
         
         print(f"Downloading from: {url}")
         
@@ -47,8 +57,7 @@ def download_file_gdown(
         output = gdown.download(
             url,
             output=output_path,
-            quiet=quiet,
-            fuzzy=True
+            quiet=quiet
         )
         
         if output:
@@ -162,6 +171,11 @@ Examples:
         default=None
     )
     parser.add_argument(
+        "-d", "--dir", "--directory",
+        help="Download directory (default: current directory)",
+        default=None
+    )
+    parser.add_argument(
         "-m", "--method",
         choices=["gdown", "requests"],
         default="gdown",
@@ -175,15 +189,20 @@ Examples:
     
     args = parser.parse_args()
     
-    # Create output directory if needed
-    if args.output:
-        output_dir = os.path.dirname(args.output)
-        if output_dir and not os.path.exists(output_dir):
-            os.makedirs(output_dir, exist_ok=True)
+    download_dir = args.dir or DOWNLOAD_DIR
+    
+    if not os.path.exists(download_dir):
+        os.makedirs(download_dir, exist_ok=True)
+    
+    output_path = args.output
+    if output_path and not os.path.isabs(output_path):
+        output_path = os.path.join(download_dir, output_path)
+    elif not output_path:
+        output_path = download_dir
     
     # Download using selected method
     if args.method == "gdown":
-        success = download_file_gdown(args.file_id, args.output, args.quiet)
+        success = download_file_gdown(args.file_id, output_path, args.quiet)
     else:
         # Extract file ID from URL if needed
         file_id = args.file_id
@@ -193,7 +212,7 @@ Examples:
             except IndexError:
                 print("✗ Could not extract file ID from URL")
                 return 1
-        success = download_file_requests(file_id, args.output)
+        success = download_file_requests(file_id, output_path)
     
     return 0 if success else 1
 
